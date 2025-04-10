@@ -3,12 +3,13 @@ from __future__ import division
 import numpy as np
 from pyorca import Agent, orca, normalized, perp
 import pygame
+import cv2
 
 # Define initial positions and goals for four agents crossing a square
-# initial_positions = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0)]
-# goals = [(5.0, 5.0), (0.0, 5.0), (0.0, 0.0), (5.0, 0.0)]
-initial_positions = [(0.0, 0.0), (10.2, 0.1), (10.0, 10.0), (0.1, 9.8)]  # Small perturbations
-goals = [(10.0, 10.0), (0.0, 10.0), (0.0, 0.0), (10.0, 0.0)]  # Keep goals as-is for now
+initial_positions = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+goals = [(10.0, 10.0), (0.0, 10.0), (0.0, 0.0), (10.0, 0.0)]
+# initial_positions = [(0.0, 0.0), (10.2, 0.1), (10.0, 10.0), (0.1, 9.8)]  # Small perturbations
+# goals = [(10.0, 10.0), (0.0, 10.0), (0.0, 0.0), (10.0, 0.0)]  # Keep goals as-is for now
 
 # Simulation parameters
 RADIUS = 0.2  # Reduced from 0.4 to allow closer approaches
@@ -46,6 +47,12 @@ FPS = 20
 dt = 1 / FPS
 tau = 5.0  # Increased from 2.0 for better planning
 
+# Video recording setup
+recording = False
+video_writer = None
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for MP4
+video_filename = "pygame_simulation.mp4"
+
 # Drawing functions
 def draw_agent(agent, color):
     pos = np.rint(agent.position * scale + O).astype(int)
@@ -59,6 +66,17 @@ def draw_velocity(agent, color):
 # Main loop
 running = True
 accum = 0
+
+# Function to convert Pygame surface to OpenCV format
+def pygame_to_opencv(surface):
+    # Convert Pygame surface to NumPy array
+    frame = pygame.surfarray.array3d(surface)
+    # Pygame array is in (width, height, channels), OpenCV expects (height, width, channels)
+    frame = np.transpose(frame, (1, 0, 2))
+    # Convert RGB to BGR (OpenCV uses BGR)
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    return frame
+
 paths = [[] for _ in agents]
 
 
@@ -112,11 +130,30 @@ while running:
         goal_pos = np.rint(np.array(goal) * scale + O).astype(int)
         pygame.draw.circle(screen, color, goal_pos, 3, 1)  # Small circle for goal
 
+    # Record the frame if recording is active
+    if recording:
+        frame = pygame_to_opencv(screen)
+        video_writer.write(frame)
+
     pygame.display.flip()
 
-    # Handle events
+    ## Handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:  # Press 'r' to toggle recording
+                recording = not recording
+                if recording:
+                    # Start recording
+                    video_writer = cv2.VideoWriter(video_filename, fourcc, FPS, dim)
+                    print(f"Started recording to {video_filename}")
+                else:
+                    # Stop recording
+                    video_writer.release()
+                    print(f"Stopped recording, saved to {video_filename}")
 
+# Clean up
+if recording and video_writer is not None:
+    video_writer.release()
 pygame.quit()
