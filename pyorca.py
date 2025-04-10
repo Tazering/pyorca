@@ -1,23 +1,3 @@
-# Copyright (c) 2013 Mak Nazecic-Andrlon
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 """Implementation of the 2D ORCA algorithm as described by J. van der Berg,
 S. J. Guy, M. Lin and D. Manocha in 'Reciprocal n-body Collision Avoidance'."""
 
@@ -38,61 +18,66 @@ from halfplaneintersect import halfplane_optimize, Line, perp
 
 class Agent(object):
     """A disk-shaped agent."""
-    def __init__(self, position, velocity, radius, max_speed, pref_velocity):
+    def __init__(self, position, velocity, radius, max_speed, goal=None):
         super(Agent, self).__init__()
         self.position = array(position)
         self.velocity = array(velocity)
         self.radius = radius
         self.max_speed = max_speed
-        self.pref_velocity = array(pref_velocity)
+        self.goal = array(goal) if goal is not None else array(position)  # Goal as numpy array
+        self.pref_velocity = array([0., 0.])  # Preferred velocity, updated by orca()
 
+# def orca(agent, colliding_agents, t, dt):
+#     """Compute ORCA solution for agent. NOTE: velocity must be _instantly_
+#     changed on tick *edge*, like first-order integration, otherwise the method
+#     undercompensates and you will still risk colliding."""
+#     # Compute preferred velocity toward goal
+#     dx = agent.goal - agent.position
+#     dist = sqrt(dot(dx, dx))
+#     if dist > 0.1:  # Move if more than 0.1m from goal
+#         speed = min(agent.max_speed, dist / dt)  # Cap speed to max_speed or dist/dt
+#         agent.pref_velocity = (speed * dx / dist)  # Normalize and scale direction
+#     else:
+#         agent.pref_velocity = array([0., 0.])  # Stop near goal
+
+#     # Compute ORCA lines for collision avoidance
+#     lines = []
+#     for collider in colliding_agents:
+#         dv, n = get_avoidance_velocity(agent, collider, t, dt)
+#         line = Line(agent.velocity + dv / 2, n)
+#         lines.append(line)
+    
+#     # Optimize to find new velocity closest to preferred velocity
+#     new_velocity = halfplane_optimize(lines, agent.pref_velocity)
+#     return new_velocity, lines
 
 def orca(agent, colliding_agents, t, dt):
-    """Compute ORCA solution for agent. NOTE: velocity must be _instantly_
-    changed on tick *edge*, like first-order integration, otherwise the method
-    undercompensates and you will still risk colliding."""
+    """Compute ORCA solution for agent."""
+    # Compute preferred velocity toward goal
+    dx = agent.goal - agent.position
+    dist = sqrt(dot(dx, dx))
+    if dist > 0.1:  # Move if more than 0.1m from goal
+        speed = min(agent.max_speed, dist / dt)
+        agent.pref_velocity = (speed * dx / dist)
+        print(f"Agent at {agent.position} heading to {agent.goal}, pref_velocity: {agent.pref_velocity}")
+    else:
+        agent.pref_velocity = array([0., 0.])
+        print(f"Agent at {agent.position} reached goal {agent.goal}")
+
+    # Compute ORCA lines for collision avoidance
     lines = []
     for collider in colliding_agents:
         dv, n = get_avoidance_velocity(agent, collider, t, dt)
         line = Line(agent.velocity + dv / 2, n)
         lines.append(line)
-    return halfplane_optimize(lines, agent.pref_velocity), lines
+    
+    new_velocity = halfplane_optimize(lines, agent.pref_velocity)
+    return new_velocity, lines
 
 def get_avoidance_velocity(agent, collider, t, dt):
     """Get the smallest relative change in velocity between agent and collider
     that will get them onto the boundary of each other's velocity obstacle
     (VO), and thus avert collision."""
-
-    # This is a summary of the explanation from the AVO paper.
-    #
-    # The set of all relative velocities that will cause a collision within
-    # time tau is called the velocity obstacle (VO). If the relative velocity
-    # is outside of the VO, no collision will happen for at least tau time.
-    #
-    # The VO for two moving disks is a circularly truncated triangle
-    # (spherically truncated cone in 3D), with an imaginary apex at the
-    # origin. It can be described by a union of disks:
-    #
-    # Define an open disk centered at p with radius r:
-    # D(p, r) := {q | ||q - p|| < r}        (1)
-    #
-    # Two disks will collide at time t iff ||x + vt|| < r, where x is the
-    # displacement, v is the relative velocity, and r is the sum of their
-    # radii.
-    #
-    # Divide by t:  ||x/t + v|| < r/t,
-    # Rearrange: ||v - (-x/t)|| < r/t.
-    #
-    # By (1), this is a disk D(-x/t, r/t), and it is the set of all velocities
-    # that will cause a collision at time t.
-    #
-    # We can now define the VO for time tau as the union of all such disks
-    # D(-x/t, r/t) for 0 < t <= tau.
-    #
-    # Note that the displacement and radius scale _inversely_ proportionally
-    # to t, generating a line of disks of increasing radius starting at -x/t.
-    # This is what gives the VO its cone shape. The _closest_ velocity disk is
-    # at D(-x/tau, r/tau), and this truncates the VO.
 
     x = -(agent.position - collider.position)
     v = agent.velocity - collider.velocity
@@ -101,48 +86,23 @@ def get_avoidance_velocity(agent, collider, t, dt):
     x_len_sq = norm_sq(x)
 
     if x_len_sq >= r * r:
-        # We need to decide whether to project onto the disk truncating the VO
-        # or onto the sides.
-        #
-        # The center of the truncating disk doesn't mark the line between
-        # projecting onto the sides or the disk, since the sides are not
-        # parallel to the displacement. We need to bring it a bit closer. How
-        # much closer can be worked out by similar triangles. It works out
-        # that the new point is at x/t cos(theta)^2, where theta is the angle
-        # of the aperture (so sin^2(theta) = (r/||x||)^2).
         adjusted_center = x/t * (1 - (r*r)/x_len_sq)
-
         if dot(v - adjusted_center, adjusted_center) < 0:
-            # v lies in the front part of the cone
-            # print("front")
-            # print("front", adjusted_center, x_len_sq, r, x, t)
             w = v - x/t
             u = normalized(w) * r/t - w
             n = normalized(w)
-        else: # v lies in the rest of the cone
-            # print("sides")
-            # Rotate x in the direction of v, to make it a side of the cone.
-            # Then project v onto that, and calculate the difference.
+        else:
             leg_len = sqrt(x_len_sq - r*r)
-            # The sign of the sine determines which side to project on.
             sine = copysign(r, det((v, x)))
             rot = array(
                 ((leg_len, sine),
                 (-sine, leg_len)))
             rotated_x = rot.dot(x) / x_len_sq
-                n = perp(rotated_x)
+            n = perp(rotated_x)
             if sine < 0:
-                # Need to flip the direction of the line to make the
-                # half-plane point out of the cone.
                 n = -n
-            # print("rotated_x=%s" % rotated_x)
             u = rotated_x * dot(v, rotated_x) - v
-            # print("u=%s" % u)
     else:
-        # We're already intersecting. Pick the closest velocity to our
-        # velocity that will get us out of the collision within the next
-        # timestep.
-        # print("intersecting")
         w = v - x/dt
         u = normalized(w) * r/dt - w
         n = normalized(w)

@@ -1,125 +1,122 @@
-# Copyright (c) 2013 Mak Nazecic-Andrlon 
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
-
 from __future__ import division
 
-from pyorca import Agent, get_avoidance_velocity, orca, normalized, perp
-from numpy import array, rint, linspace, pi, cos, sin
+import numpy as np
+from pyorca import Agent, orca, normalized, perp
 import pygame
 
-import itertools
-import random
+# Define initial positions and goals for four agents crossing a square
+# initial_positions = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0)]
+# goals = [(5.0, 5.0), (0.0, 5.0), (0.0, 0.0), (5.0, 0.0)]
+initial_positions = [(0.0, 0.0), (10.2, 0.1), (10.0, 10.0), (0.1, 9.8)]  # Small perturbations
+goals = [(10.0, 10.0), (0.0, 10.0), (0.0, 0.0), (10.0, 0.0)]  # Keep goals as-is for now
 
-N_AGENTS = 8
-RADIUS = 8.
-SPEED = 10
+# Simulation parameters
+RADIUS = 0.2  # Reduced from 0.4 to allow closer approaches
+SPEED = 2.0   # Max speed (m/s)
 
+# Initialize agents with goals
 agents = []
-for i in range(N_AGENTS):
-    theta = 2 * pi * i / N_AGENTS
-    x = RADIUS * array((cos(theta), sin(theta))) #+ random.uniform(-1, 1)
-    vel = normalized(-x) * SPEED
-    pos = (random.uniform(-20, 20), random.uniform(-20, 20))
-    agents.append(Agent(pos, (0., 0.), 1., SPEED, vel))
+for i, (pos, goal) in enumerate(zip(initial_positions, goals)):
+    agent = Agent(pos, (0., 0.), RADIUS, SPEED, goal=goal)
+    print(f"Agent {i+1} initialized at {pos} with goal {goal}")
+    agents.append(agent)
 
-
+# Colors for each agent
 colors = [
-    (255, 0, 0),
-    (0, 255, 0),
-    (0, 0, 255),
-    (255, 255, 0),
-    (0, 255, 255),
-    (255, 0, 255),
+    (255, 0, 0),    # Red
+    (0, 255, 0),    # Green
+    (0, 0, 255),    # Blue
+    (255, 255, 0),  # Yellow
 ]
 
+# Pygame setup
 pygame.init()
-
 dim = (640, 480)
 screen = pygame.display.set_mode(dim)
+pygame.display.set_caption("pyorca with Goals: Four Agents Crossing a Square")
 
-O = array(dim) / 2  # Screen position of origin.
-scale = 6  # Drawing scale.
+O = np.array(dim) / 2  # Screen position of origin
+scale = 44  # Drawing scale (meters to pixels)
+sim_center = np.array([5.1, 5.0])  # Center of the simulation space
+window_center = np.array(dim) / 2  # Center of the window (320, 240)
+O = window_center - sim_center * scale  # Origin to center the simulation
 
 clock = pygame.time.Clock()
 FPS = 20
-dt = 1/FPS
-tau = 5
+dt = 1 / FPS
+tau = 5.0  # Increased from 2.0 for better planning
 
+# Drawing functions
 def draw_agent(agent, color):
-    pygame.draw.circle(screen, color, rint(agent.position * scale + O).astype(int), int(round(agent.radius * scale)), 0)
+    pos = np.rint(agent.position * scale + O).astype(int)
+    pygame.draw.circle(screen, color, pos, int(round(agent.radius * scale)), 0)
 
-def draw_orca_circles(a, b):
-    for x in linspace(0, tau, 21):
-        if x == 0:
-            continue
-        pygame.draw.circle(screen, pygame.Color(0, 0, 255), rint((-(a.position - b.position) / x + a.position) * scale + O).astype(int), int(round((a.radius + b.radius) * scale / x)), 1)
+def draw_velocity(agent, color):
+    start = np.rint(agent.position * scale + O).astype(int)
+    end = np.rint((agent.position + agent.velocity) * scale + O).astype(int)
+    pygame.draw.line(screen, color, start, end, 1)
 
-def draw_velocity(a):
-    pygame.draw.line(screen, pygame.Color(0, 255, 255), rint(a.position * scale + O).astype(int), rint((a.position + a.velocity) * scale + O).astype(int), 1)
-    # pygame.draw.line(screen, pygame.Color(255, 0, 255), rint(a.position * scale + O).astype(int), rint((a.position + a.pref_velocity) * scale + O).astype(int), 1)
-
+# Main loop
 running = True
 accum = 0
-all_lines = [[]] * len(agents)
+paths = [[] for _ in agents]
+
+
 while running:
     accum += clock.tick(FPS)
 
+    # Update simulation at fixed time steps
     while accum >= dt * 1000:
         accum -= dt * 1000
 
+        # Compute new velocities using ORCA
         new_vels = [None] * len(agents)
         for i, agent in enumerate(agents):
-            candidates = agents[:i] + agents[i + 1:]
-            # print(candidates)
-            new_vels[i], all_lines[i] = orca(agent, candidates, tau, dt)
-            # print(i, agent.velocity)
+            candidates = agents[:i] + agents[i+1:]
+            new_vels[i], _ = orca(agent, candidates, tau, dt)
 
+        # Apply velocities and update positions
+        all_done = True
         for i, agent in enumerate(agents):
             agent.velocity = new_vels[i]
+            print(f"Agent {i+1} velocity after ORCA: {agent.velocity}, pref_velocity: {agent.pref_velocity}")
             agent.position += agent.velocity * dt
+            paths[i].append(agent.position.copy())  # Store a copy of the position
+            print(f"Agent {i+1} position: {agent.position}, goal: {agent.goal}")
+            dist_to_goal = np.sqrt(np.sum((agent.position - agent.goal)**2))
+            if dist_to_goal > 0.1:
+                all_done = False
 
-    screen.fill(pygame.Color(0, 0, 0))
+        # Stop if all agents are near their goals
+        if all_done:
+            print("All agents reached their goals!")
+            running = False
 
-    for agent in agents[1:]:
-        draw_orca_circles(agents[0], agent)
+    # Render
+    screen.fill(pygame.Color(0, 0, 0))  # Black background
 
-    for agent, color in zip(agents, itertools.cycle(colors)):
+    for path, color in zip(paths, colors):
+        if len(path) > 1:
+            for i in range(len(path) - 1):
+                start = np.rint(path[i] * scale + O).astype(int)
+                end = np.rint(path[i+1] * scale + O).astype(int)
+                pygame.draw.line(screen, color, start, end, 1)
+
+    # Draw agents and their velocities
+    for agent, color in zip(agents, colors):
         draw_agent(agent, color)
-        draw_velocity(agent)
-        # print(sqrt(norm_sq(agent.velocity)))
+        draw_velocity(agent, (255, 255, 255))  # White velocity lines
 
-    for line in all_lines[0]:
-        # Draw ORCA line
-        alpha = agents[0].position + line.point + perp(line.direction) * 100
-        beta = agents[0].position + line.point + perp(line.direction) * -100
-        pygame.draw.line(screen, (255, 255, 255), rint(alpha * scale + O).astype(int), rint(beta * scale + O).astype(int), 1)
-
-        # Draw normal to ORCA line
-        gamma = agents[0].position + line.point
-        delta = agents[0].position + line.point + line.direction
-        pygame.draw.line(screen, (255, 255, 255), rint(gamma * scale + O).astype(int), rint(delta * scale + O).astype(int), 1)
+    # Draw goals
+    for goal, color in zip(goals, colors):
+        goal_pos = np.rint(np.array(goal) * scale + O).astype(int)
+        pygame.draw.circle(screen, color, goal_pos, 3, 1)  # Small circle for goal
 
     pygame.display.flip()
 
+    # Handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+
 pygame.quit()
