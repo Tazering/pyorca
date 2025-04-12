@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import Twist
-from nav_msgs.msg import Odometry, Path
+from nav_msgs.msg import Odometry
 from math import pi, atan2, sqrt
 import numpy as np
 from ORCA import Orca
@@ -44,10 +44,7 @@ class OrcaNode0:
         # Set up ORCA agent for this robot
         self.agent = self.orca.add_agent(self.current_position, self.current_velocity, 0.2, 0.4, self.goal)
 
-        rospy.Subscriber(f"/{self.robot_name}/adjusted_traj", Path, self.trajectory_callback)
-
-        self.current_trajectory = []
-        self.following_trajectory = True
+        rospy.Subscriber(f"/{self.robot_name}/adjusted_traj", String, self.trajectory_callback)
 
         # Start the main control loop
         self.main_loop()
@@ -81,37 +78,15 @@ class OrcaNode0:
         return callback
 
     def trajectory_callback(self, msg):
-        self.current_trajectory = np.array([
-            [pose.pose.position.x, pose.pose.position.y] for pose in msg.poses
-        ])        
-        self.following_trajectory = True
-
-    def update_goal_from_trajectory(self):
-        """Select the closest future point in trajectory as the new goal."""
-        if len(self.current_trajectory) == 0:
-            return
-
-        dists = np.linalg.norm(self.current_trajectory - self.agent.position, axis=1)
-        idx = np.argmin(dists)
-        if idx < len(self.current_trajectory):
-            self.goal = self.current_trajectory[idx]
-            self.current_trajectory = self.current_trajectory[idx+1:]
+        """Callback for the adjusted trajectory of the robot."""
+        # Parse the received trajectory data
+        # Assuming the trajectory is sent as a string, you might need to parse it into a usable format (like a list of waypoints)
+        # For simplicity, we'll just set the last goal as the new goal from the trajectory
+        self.goal = np.array([float(coord) for coord in msg.data.split(',')])
 
     def update_goals(self):
         """Update the goal for the robot. Can be set dynamically."""
-        if self.following_trajectory and len(self.current_trajectory) > 0:
-            self.goal = self.current_trajectory[0]
-        else:
-            self.orca.set_waypoints(self.agent, [self.goal])
-
-    def check_proximity_to_other_agents(self):
-        """Check if another agent is too close."""
-        threshold_distance = 1.0  # The distance threshold for switching to ORCA
-        for other_agent in self.other_agents.values():
-            distance = np.linalg.norm(self.agent.position - other_agent["position"])
-            if distance < threshold_distance:
-                return True  # Too close to another agent
-        return False
+        self.orca.set_waypoints(self.agent, [self.goal])
 
     def main_loop(self):
         """Main control loop where ORCA computations happen."""
@@ -120,12 +95,6 @@ class OrcaNode0:
             self.update_goals()
 
             # === Inject other agents into ORCA ===
-            if self.check_proximity_to_other_agents():
-                self.following_trajectory = False
-                rospy.loginfo(f"[{self.robot_name}] ==================== Switching to ORCA due to proximity ============")
-            else:
-                self.following_trajectory = True
-            
             self.orca.agents = [self.agent]  # Reset to only include self
 
             for agent_data in self.other_agents.values():
@@ -139,29 +108,12 @@ class OrcaNode0:
                 self.orca.agents.append(ghost)
 
             self.orca.update_all_velocities()
-
-            if self.following_trajectory:
-                self.update_goal_from_trajectory()
-                direction = self.goal - self.agent.position
-                distance = np.linalg.norm(direction)
-                
-
-                if distance > 0.05:  # A threshold to decide if the goal is reached
-                    direction = direction/distance
-                    desired_speed = min(0.4, distance)
-                    heading = atan2(direction[1], direction[0])
-                else:
-                    desired_speed = 0.0
-                    heading = 0.0
-
-            else:
-                desired_speed, heading = self.orca.compute_velocity(self.agent)
-
+            new_speed, new_heading = self.orca.compute_velocity(self.agent)
 
             # Publish new velocity
             twist = Twist()
-            twist.linear.x = desired_speed * np.cos(heading)
-            twist.linear.y = desired_speed * np.sin(heading)
+            twist.linear.x = new_speed * np.cos(new_heading)
+            twist.linear.y = new_speed * np.sin(new_heading)
             self.cmd_vel_pub.publish(twist)
 
             rate.sleep()

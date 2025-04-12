@@ -203,7 +203,7 @@ class HybridAStarPlanner:
         
         # Publish the static obstacles as markers.
         self.publish_obstacle_markers()
-        rospy.loginfo("Hybrid A* planner node started and obstacle markers published.")
+        # rospy.loginfo("Hybrid A* planner node started and obstacle markers published.")
 
     def velocity_callback(self, msg):
         # Update the new_velocity.
@@ -246,7 +246,7 @@ class HybridAStarPlanner:
             marker_array.markers.append(marker)
         
         self.obstacle_marker_pub.publish(marker_array)
-        rospy.loginfo("Published %d obstacle markers.", len(marker_array.markers))
+        # rospy.loginfo("Published %d obstacle markers.", len(marker_array.markers))
 
     def timer_callback(self, event):
         if self.current_odom is None:
@@ -264,8 +264,8 @@ class HybridAStarPlanner:
         start_heading = yaw_deg
 
         # Read goal and planning parameters from ROS parameters.
-        goal_x = rospy.get_param("r0/goal_x", 4)
-        goal_y = rospy.get_param("r0/goal_y", 2)
+        goal_x = rospy.get_param("r0/goal_x", 4.0)
+        goal_y = rospy.get_param("r0/goal_y", 0.5)
         goal_xy = (goal_x, goal_y)
         left_deg = rospy.get_param("r0/left_deg", 30.0)
         right_deg = rospy.get_param("r0/right_deg", 30.0)
@@ -320,7 +320,7 @@ class HybridAStarPlanner:
 
         # Read goal and planning parameters from ROS parameters.
         goal_x = rospy.get_param("r0/goal_x", 4.0)
-        goal_y = rospy.get_param("r0/goal_y", 2.0)
+        goal_y = rospy.get_param("r0/goal_y", 0.5)
         goal_xy = (goal_x, goal_y)
         left_deg = rospy.get_param("r0/left_deg", 15.0)
         right_deg = rospy.get_param("r0/right_deg", 15.0)
@@ -356,7 +356,7 @@ class HybridAStarPlanner:
 
         # Publish the adjusted path.
         self.path_pub_adjusted.publish(path_msg)
-        rospy.loginfo("Published adjusted Hybrid A* path.")
+        # rospy.loginfo("Published adjusted Hybrid A* path.")
 
 def main():
     rospy.init_node("trajectory_planner_r0", anonymous=False)

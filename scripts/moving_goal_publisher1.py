@@ -16,12 +16,12 @@ class MovingGoalPublisher:
         self.current_goal = None
 
     def trajectory_callback(self, path_msg):
-        rospy.loginfo("Trajectory callback triggered.")
+        # rospy.loginfo("Trajectory callback triggered.")
         if len(path_msg.poses) == 0:
             rospy.logwarn("Received empty trajectory.")
             return
 
-        rospy.loginfo(f"Received trajectory with {len(path_msg.poses)} points.")
+        # rospy.loginfo(f"Received trajectory with {len(path_msg.poses)} points.")
         
         # Choose lookahead point
         idx = min(self.lookahead_idx, len(path_msg.poses) - 1)
@@ -30,7 +30,7 @@ class MovingGoalPublisher:
         # Save and publish
         self.current_goal = target_pose
         self.goal_pub.publish(target_pose)
-        rospy.loginfo_throttle(2.0, f"Published new ORCA goal at index {idx}")
+        # rospy.loginfo_throttle(2.0, f"Published new ORCA goal at index {idx}")
 
 
 if __name__ == '__main__':
