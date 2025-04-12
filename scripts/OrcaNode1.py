@@ -151,7 +151,7 @@ class OrcaNode0:
                     desired_speed = min(0.4, distance)
                     heading = atan2(direction[1], direction[0])
                 else:
-                    desired_speed = 0.0
+                    desired_speed = 0.05
                     heading = 0.0
 
             else:
