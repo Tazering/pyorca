@@ -3,12 +3,12 @@
 ROS node for Hybrid A* Planning using Current Odometry as the Start
 
 Subscribes to:
-    - "/r1/odom" (nav_msgs/Odometry)
-    - "/r1/new_velocity" (std_msgs/Float32)
+    - "/r0/odom" (nav_msgs/Odometry)
+    - "/r0/new_velocity" (std_msgs/Float32)
 
 Publishes:
-    - "/r1/default_traj" (nav_msgs/Path)
-    - "/r1/adjusted_traj" (nav_msgs/Path)
+    - "/r0/default_traj" (nav_msgs/Path)
+    - "/r0/adjusted_traj" (nav_msgs/Path)
     - "/obstacle_markers" (visualization_msgs/MarkerArray)
 
 This node uses the current odometry message as the starting point for Hybrid A* planning.
@@ -189,14 +189,14 @@ class HybridAStarPlanner:
     Also publishes static obstacles as visualization markers for RViz.
     """
     def __init__(self):
-        self.path_pub = rospy.Publisher("/r1/default_traj", Path, queue_size=10, latch=True)
-        self.path_pub_adjusted = rospy.Publisher("/r1/adjusted_traj", Path, queue_size=10, latch=True)
+        self.path_pub = rospy.Publisher("/r0/default_traj", Path, queue_size=10, latch=True)
+        self.path_pub_adjusted = rospy.Publisher("/r0/adjusted_traj", Path, queue_size=10, latch=True)
         self.obstacle_marker_pub = rospy.Publisher("/obstacle_markers", MarkerArray, queue_size=10, latch=True)
         self.current_odom = None
         self.new_velocity = 0.1
         
-        rospy.Subscriber("/r1/odom", Odometry, self.odom_callback)
-        rospy.Subscriber("/r1/new_velocity", Float32, self.velocity_callback)
+        rospy.Subscriber("/r0/odom", Odometry, self.odom_callback)
+        rospy.Subscriber("/r0/new_velocity", Float32, self.velocity_callback)
         # Set up timers to run the planning at 1 Hz.
         self.timer = rospy.Timer(rospy.Duration(2.0), self.timer_callback)
         self.timer_2 = rospy.Timer(rospy.Duration(2.0), self.timer_callback_2)
@@ -264,12 +264,12 @@ class HybridAStarPlanner:
         start_heading = yaw_deg
 
         # Read goal and planning parameters from ROS parameters.
-        goal_x = rospy.get_param("r1/goal_x", 4.0)
-        goal_y = rospy.get_param("r1/goal_y", 4.0)
+        goal_x = rospy.get_param("r0/goal_x", 4)
+        goal_y = rospy.get_param("r0/goal_y", 2)
         goal_xy = (goal_x, goal_y)
-        left_deg = rospy.get_param("r1/left_deg", 30.0)
-        right_deg = rospy.get_param("r1/right_deg", 30.0)
-        step = rospy.get_param("r1/step", 0.1)
+        left_deg = rospy.get_param("r0/left_deg", 30.0)
+        right_deg = rospy.get_param("r0/right_deg", 30.0)
+        step = rospy.get_param("r0/step", 0.1)
 
         # Build the planning environment.
         obstacles, walls = build_static_environment()
@@ -279,7 +279,7 @@ class HybridAStarPlanner:
                             heading_deg=start_heading, left_deg=left_deg, right_deg=right_deg,
                             goal_radius=0.2, max_iter=40000, padding=0.2)
         if not path:
-            rospy.logwarn("R1 No path found by Hybrid A* from current odometry.")
+            rospy.logwarn("R0 No path found by Hybrid A* from current odometry.")
             return
 
         # Create the Path message.
@@ -319,12 +319,12 @@ class HybridAStarPlanner:
         start_heading = yaw_deg
 
         # Read goal and planning parameters from ROS parameters.
-        goal_x = rospy.get_param("r1/goal_x", 4.0)
-        goal_y = rospy.get_param("r1/goal_y", 2.0)
+        goal_x = rospy.get_param("r0/goal_x", 4.0)
+        goal_y = rospy.get_param("r0/goal_y", 2.0)
         goal_xy = (goal_x, goal_y)
-        left_deg = rospy.get_param("r1/left_deg", 15.0)
-        right_deg = rospy.get_param("r1/right_deg", 15.0)
-        step = rospy.get_param("r1/step", 0.25)
+        left_deg = rospy.get_param("r0/left_deg", 15.0)
+        right_deg = rospy.get_param("r0/right_deg", 15.0)
+        step = rospy.get_param("r0/step", 0.25)
 
         # Build the planning environment.
         obstacles, walls = build_static_environment()
@@ -359,7 +359,7 @@ class HybridAStarPlanner:
         rospy.loginfo("Published adjusted Hybrid A* path.")
 
 def main():
-    rospy.init_node("trajectory_planner_r1", anonymous=False)
+    rospy.init_node("trajectory_planner_r0", anonymous=False)
     planner = HybridAStarPlanner()
     rospy.spin()
 

@@ -9,21 +9,19 @@ import numpy as np
 from ORCA import Orca
 from pyorca import Agent
 
-class OrcaNode1:
+class OrcaNode0:
     def __init__(self, robot_name):
-        self.robot_name = "r1"
-
-        rospy.loginfo(f"[{self.robot_name}] ORCA Controller Started.")
-
+        self.robot_name = robot_name
         self.orca = Orca()  # Instantiate ORCA class
         self.agent = None
-        self.current_position = np.array([1.0, 1.0])
+        self.current_position = np.array([1.0, 3.0])
         self.current_velocity = np.array([0.0, 0.0])
-        self.goal = np.array([4.0, 4.0])
+        self.goal = np.array([4.0, 2.0])
         
         # Initialize ROS
-        self.cmd_vel_pub = rospy.Publisher(f"/r1/cmd_vel", Twist, queue_size=10)
-        self.odom_sub = rospy.Subscriber(f"/r1/odom", Odometry, self.odom_callback)
+        rospy.init_node(f"orca_controller0")
+        self.cmd_vel_pub = rospy.Publisher(f"/{self.robot_name}/cmd_vel", Twist, queue_size=10)
+        self.odom_sub = rospy.Subscriber(f"/{self.robot_name}/odom", Odometry, self.odom_callback)
 
         # Set up ORCA agent for this robot
         self.agent = self.orca.add_agent(self.current_position, self.current_velocity, 0.2, 1.0, self.goal)
@@ -72,7 +70,7 @@ class OrcaNode1:
 
 if __name__ == '__main__':
     try:
-        rospy.init_node(f"orca_controller1", anonymous = False)
-        orca_node = OrcaNode1("r1")
+        robot_name = rospy.get_param("~robot_name", "r0")
+        orca_node = OrcaNode0(robot_name)
     except rospy.ROSInterruptException:
         pass

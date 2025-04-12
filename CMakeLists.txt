@@ -16,3 +16,8 @@ include_directories(
 
 catkin_python_setup()
 
+catkin_install_python(PROGRAMS
+  scripts/moving_goal_publisher0.py
+  scripts/moving_goal_publisher1.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
